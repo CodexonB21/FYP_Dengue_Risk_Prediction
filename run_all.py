@@ -31,8 +31,18 @@ def run_module1() -> None:
 
 
 def run_module2() -> None:
-    print("Module 2 (classification) is not yet implemented.")
-    print("See src/module2_classification/train.py to begin.")
+    import importlib
+
+    step1 = importlib.import_module("src.module2_classification.01_create_outbreak_label")
+    step2 = importlib.import_module("src.module2_classification.02_feature_selection")
+    step3 = importlib.import_module("src.module2_classification.03_stage1_base_model")
+
+    print("Module 2 — Step 1: outbreak labels")
+    step1.run_create_outbreak_label()
+    print("\nModule 2 — Step 2: feature selection + split")
+    step2.run_feature_selection()
+    print("\nModule 2 — Step 3: Stage 1 base classifier")
+    step3.run_stage1_base_model()
 
 
 def run_module3() -> None:

@@ -1,0 +1,34 @@
+{
+  "stage1_features": [
+    "rolling_mean_2",
+    "cases_lag_1",
+    "cases_lag_2",
+    "cases_lag_3",
+    "rolling_std_4",
+    "rate_of_change",
+    "year",
+    "sin_week",
+    "cos_week",
+    "is_ne_monsoon"
+  ],
+  "stage2_features": [
+    "rolling_mean_2",
+    "cases_lag_1",
+    "cases_lag_2",
+    "cases_lag_3",
+    "rolling_std_4",
+    "rate_of_change",
+    "year",
+    "sin_week",
+    "cos_week",
+    "is_ne_monsoon",
+    "rainfall_lag_6",
+    "rainfall_lag_8",
+    "rainfall_anomaly",
+    "temperature_anomaly",
+    "humidity_anomaly",
+    "tmean",
+    "humidity",
+    "temp_lag_1"
+  ]
+}

@@ -62,16 +62,30 @@ python run_all.py
 | `data/features/module2_features.csv` | Subset for outbreak classification |
 | `outputs/reports/preprocessing_report.txt` | Validation and missingness report |
 
-## Module 2 (Classification) — Starting Point
+## Module 2 (Classification)
 
-After preprocessing, begin Module 2 in `src/module2_classification/`:
+After preprocessing, run the numbered scripts under `src/module2_classification/`:
 
-1. `outbreak_label.py` — define outbreak labels from case counts
-2. `stage1_base_classifier.py` — base classifier
-3. `stage2_compensation.py` — compensation model
-4. `train.py` / `evaluate.py` — training and evaluation
+```powershell
+python run_all.py --step module2
+```
 
-Input data: `data/features/module2_features.csv`
+Or run steps individually:
+
+```powershell
+python -m src.module2_classification.01_create_outbreak_label
+python -m src.module2_classification.02_feature_selection
+python -m src.module2_classification.03_stage1_base_model
+python -m src.module2_classification.evaluate
+```
+
+| Path | Description |
+|------|-------------|
+| `src/module2_classification/data/merged_with_risk_label.csv` | Labeled copy with low / medium / high risk |
+| `src/module2_classification/data/module2_features.csv` | Feature subset for classification |
+| `src/module2_classification/data/train_data.csv` / `test_data.csv` | Temporal train/test split |
+| `src/module2_classification/models/base_classifier.pkl` | Stage 1 XGBoost model |
+| `src/module2_classification/results/` | Confusion matrix, feature importance, metrics |
 
 ## Adding New Modules
 
