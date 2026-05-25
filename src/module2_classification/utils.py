@@ -15,7 +15,7 @@ DATA_DIR = MODULE_DIR / "data"
 MODELS_DIR = MODULE_DIR / "models"
 RESULTS_DIR = MODULE_DIR / "results"
 
-MERGED_WITH_LABEL_PATH = DATA_DIR / "merged_with_risk_label.csv"
+MERGED_WITH_LABEL_PATH = DATA_DIR / "merged_with_outbreak_label.csv"
 MODULE2_FEATURES_PATH = DATA_DIR / "module2_features.csv"
 TRAIN_DATA_PATH = DATA_DIR / "train_data.csv"
 TEST_DATA_PATH = DATA_DIR / "test_data.csv"
@@ -28,13 +28,13 @@ CONFUSION_MATRIX_PATH = RESULTS_DIR / "confusion_matrix.png"
 METRICS_PATH = RESULTS_DIR / "metrics.txt"
 
 ID_COLUMNS = ("district", "week_start_date")
-TARGET_COLUMN = "risk_label"
+TARGET_COLUMN = "outbreak_label"
 CASES_COLUMN = "cases"
+NEGATIVE_LABEL = 0
+POSITIVE_LABEL = 1
 
-# District-wise tertiles on weekly cases: low | medium | high.
-RISK_CLASSES = ("low", "medium", "high")
-RISK_LOW_PERCENTILE = 1 / 3
-RISK_HIGH_PERCENTILE = 2 / 3
+# District-wise percentile threshold: cases >= threshold -> outbreak (1).
+OUTBREAK_PERCENTILE = 0.75
 TEST_WEEK_FRACTION = 0.20
 RANDOM_STATE = 42
 
@@ -76,40 +76,23 @@ def load_merged_source() -> pd.DataFrame:
     return load_csv(MERGED_WEEKLY_PATH, parse_dates=["week_start_date"])
 
 
-def add_risk_label(
+def add_outbreak_label(
     df: pd.DataFrame,
-    low_percentile: float = RISK_LOW_PERCENTILE,
-    high_percentile: float = RISK_HIGH_PERCENTILE,
+    percentile: float = OUTBREAK_PERCENTILE,
 ) -> pd.DataFrame:
-    """Assign low / medium / high risk from district-wise case tertiles."""
+    """Label weeks at or above a district-wise case percentile as outbreaks."""
     out = df.copy()
-
-    def _assign_group(group: pd.DataFrame) -> pd.Series:
-        q_low = group[CASES_COLUMN].quantile(low_percentile)
-        q_high = group[CASES_COLUMN].quantile(high_percentile)
-        labels = pd.Series("medium", index=group.index, dtype="object")
-        labels[group[CASES_COLUMN] < q_low] = "low"
-        labels[group[CASES_COLUMN] >= q_high] = "high"
-        return labels
-
-    out[TARGET_COLUMN] = out.groupby("district", group_keys=False).apply(_assign_group)
+    thresholds = out.groupby("district")[CASES_COLUMN].transform(
+        lambda s: s.quantile(percentile)
+    )
+    out[TARGET_COLUMN] = (out[CASES_COLUMN] >= thresholds).astype(int)
     return out
 
 
-def encode_risk_label(labels: pd.Series) -> pd.Series:
-    """Map risk labels to integers 0=low, 1=medium, 2=high."""
-    mapping = {label: idx for idx, label in enumerate(RISK_CLASSES)}
-    encoded = labels.map(mapping)
-    if encoded.isna().any():
-        unknown = sorted(labels[encoded.isna()].unique())
-        raise ValueError(f"Unknown risk labels: {unknown}")
-    return encoded.astype(int)
-
-
-def risk_label_distribution(df: pd.DataFrame) -> pd.Series:
-    """Return class counts ordered low -> medium -> high."""
+def outbreak_label_distribution(df: pd.DataFrame) -> pd.Series:
+    """Return normal/outbreak counts keyed by outbreak_label (0/1)."""
     counts = df[TARGET_COLUMN].value_counts()
-    return counts.reindex(RISK_CLASSES, fill_value=0)
+    return counts.reindex([NEGATIVE_LABEL, POSITIVE_LABEL], fill_value=0)
 
 
 def select_module2_columns(df: pd.DataFrame) -> pd.DataFrame:

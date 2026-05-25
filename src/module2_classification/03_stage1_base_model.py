@@ -1,5 +1,5 @@
 """
-Step 3: Train the Stage 1 base risk classifier (low / medium / high).
+Step 3: Train the Stage 1 base outbreak classifier (binary).
 
 Uses epidemiological + temporal features only, saves the model under `models/`,
 and writes evaluation plots/metrics to `results/`.
@@ -28,7 +28,6 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import XGBClassifier
 
 from src.module2_classification.utils import (
@@ -39,11 +38,9 @@ from src.module2_classification.utils import (
     METRICS_PATH,
     RANDOM_STATE,
     RESULTS_DIR,
-    RISK_CLASSES,
     TARGET_COLUMN,
     TEST_DATA_PATH,
     TRAIN_DATA_PATH,
-    encode_risk_label,
     ensure_module_dirs,
     load_feature_sets,
 )
@@ -52,7 +49,7 @@ from src.utils import load_csv
 
 def _prepare_xy(df: pd.DataFrame, features: list[str]) -> tuple[pd.DataFrame, pd.Series]:
     x = df[features].replace([np.inf, -np.inf], np.nan)
-    y = encode_risk_label(df[TARGET_COLUMN])
+    y = df[TARGET_COLUMN]
     return x, y
 
 
@@ -67,26 +64,29 @@ def train_base_classifier(
     train_df: pd.DataFrame,
     features: list[str],
 ) -> tuple[XGBClassifier, SimpleImputer]:
-    """Fit an imputer + multiclass XGBoost classifier on Stage 1 features."""
+    """Fit an imputer + binary XGBoost classifier on Stage 1 features."""
     x_train, y_train = _prepare_xy(train_df, features)
 
     imputer = SimpleImputer(strategy="median")
     x_train_imputed = imputer.fit_transform(x_train)
-    sample_weight = compute_sample_weight(class_weight="balanced", y=y_train)
+
+    pos = int(y_train.sum())
+    neg = int(len(y_train) - pos)
+    scale_pos_weight = neg / max(pos, 1)
 
     model = XGBClassifier(
-        objective="multi:softprob",
-        num_class=len(RISK_CLASSES),
+        objective="binary:logistic",
         n_estimators=300,
         max_depth=5,
         learning_rate=0.05,
         subsample=0.9,
         colsample_bytree=0.9,
-        eval_metric="mlogloss",
+        scale_pos_weight=scale_pos_weight,
+        eval_metric="logloss",
         random_state=RANDOM_STATE,
         n_jobs=-1,
     )
-    model.fit(x_train_imputed, y_train, sample_weight=sample_weight)
+    model.fit(x_train_imputed, y_train)
     return model, imputer
 
 
@@ -96,25 +96,19 @@ def evaluate_model(
     test_df: pd.DataFrame,
     features: list[str],
 ) -> dict[str, float]:
-    """Compute multiclass metrics on the held-out test set."""
+    """Compute binary classification metrics on the held-out test set."""
     x_test, y_test = _prepare_xy(test_df, features)
     x_test_imputed = imputer.transform(x_test)
 
     y_pred = model.predict(x_test_imputed)
-    y_prob = model.predict_proba(x_test_imputed)
+    y_prob = model.predict_proba(x_test_imputed)[:, 1]
 
     return {
         "accuracy": accuracy_score(y_test, y_pred),
-        "precision_macro": precision_score(y_test, y_pred, average="macro", zero_division=0),
-        "recall_macro": recall_score(y_test, y_pred, average="macro", zero_division=0),
-        "f1_macro": f1_score(y_test, y_pred, average="macro", zero_division=0),
-        "f1_weighted": f1_score(y_test, y_pred, average="weighted", zero_division=0),
-        "roc_auc_ovr": roc_auc_score(
-            y_test,
-            y_prob,
-            multi_class="ovr",
-            average="macro",
-        ),
+        "precision": precision_score(y_test, y_pred, zero_division=0),
+        "recall": recall_score(y_test, y_pred, zero_division=0),
+        "f1": f1_score(y_test, y_pred, zero_division=0),
+        "roc_auc": roc_auc_score(y_test, y_prob),
     }
 
 
@@ -130,15 +124,15 @@ def plot_feature_importance(model: XGBClassifier, features: list[str], path) -> 
 
 
 def plot_confusion_matrix(y_true, y_pred, path) -> None:
-    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(RISK_CLASSES))))
-    plt.figure(figsize=(6, 5))
+    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+    plt.figure(figsize=(5, 4))
     sns.heatmap(
         cm,
         annot=True,
         fmt="d",
         cmap="Blues",
-        xticklabels=list(RISK_CLASSES),
-        yticklabels=list(RISK_CLASSES),
+        xticklabels=["Normal", "Outbreak"],
+        yticklabels=["Normal", "Outbreak"],
     )
     plt.title("Stage 1 Confusion Matrix (Test Set)")
     plt.ylabel("Actual")
@@ -158,31 +152,29 @@ def write_metrics(
     y_pred,
 ) -> None:
     lines = [
-        "Module 2 — Stage 1 Base Classifier (low / medium / high)",
+        "Module 2 — Stage 1 Base Classifier (binary outbreak)",
         f"Generated: {datetime.now().isoformat(timespec='seconds')}",
         "",
         "Data",
         "-" * 40,
         f"Train rows: {train_size:,}",
         f"Test rows: {test_size:,}",
-        f"Classes: {', '.join(RISK_CLASSES)}",
         f"Features ({len(features)}): {', '.join(features)}",
         "",
         "Test metrics",
         "-" * 40,
-        f"Accuracy:         {metrics['accuracy']:.4f}",
-        f"Precision (macro): {metrics['precision_macro']:.4f}",
-        f"Recall (macro):    {metrics['recall_macro']:.4f}",
-        f"F1 (macro):        {metrics['f1_macro']:.4f}",
-        f"F1 (weighted):     {metrics['f1_weighted']:.4f}",
-        f"ROC-AUC (OvR):     {metrics['roc_auc_ovr']:.4f}",
+        f"Accuracy:  {metrics['accuracy']:.4f}",
+        f"Precision: {metrics['precision']:.4f}",
+        f"Recall:    {metrics['recall']:.4f}",
+        f"F1:        {metrics['f1']:.4f}",
+        f"ROC-AUC:   {metrics['roc_auc']:.4f}",
         "",
         "Classification report",
         "-" * 40,
         classification_report(
             y_test,
             y_pred,
-            target_names=list(RISK_CLASSES),
+            target_names=["Normal", "Outbreak"],
             zero_division=0,
         ),
     ]
@@ -195,7 +187,7 @@ def save_model_bundle(model, imputer, features: list[str], path) -> None:
         "imputer": imputer,
         "features": features,
         "target": TARGET_COLUMN,
-        "classes": list(RISK_CLASSES),
+        "positive_class": 1,
         "id_columns": list(ID_COLUMNS),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +209,7 @@ def run_stage1_base_model() -> dict[str, float]:
     metrics = evaluate_model(model, imputer, test_df, features)
 
     x_test, y_test = _prepare_xy(test_df, features)
-    y_pred = model.predict(imputer.transform(x_test))
+    y_pred = model.predict(imputer.transform(x_test.replace([np.inf, -np.inf], np.nan)))
 
     save_model_bundle(model, imputer, features, BASE_MODEL_PATH)
     plot_feature_importance(model, features, FEATURE_IMPORTANCE_PATH)
@@ -239,9 +231,9 @@ def run_stage1_base_model() -> dict[str, float]:
     print(f"  {METRICS_PATH.name}")
     print(
         "Test metrics — "
-        f"Accuracy={metrics['accuracy']:.3f}, "
-        f"F1(macro)={metrics['f1_macro']:.3f}, "
-        f"ROC-AUC={metrics['roc_auc_ovr']:.3f}"
+        f"F1={metrics['f1']:.3f}, "
+        f"Recall={metrics['recall']:.3f}, "
+        f"ROC-AUC={metrics['roc_auc']:.3f}"
     )
     return metrics
 

@@ -81,7 +81,7 @@ python -m src.module2_classification.evaluate
 
 | Path | Description |
 |------|-------------|
-| `src/module2_classification/data/merged_with_risk_label.csv` | Labeled copy with low / medium / high risk |
+| `src/module2_classification/data/merged_with_outbreak_label.csv` | Labeled copy with binary outbreak flag |
 | `src/module2_classification/data/module2_features.csv` | Feature subset for classification |
 | `src/module2_classification/data/train_data.csv` / `test_data.csv` | Temporal train/test split |
 | `src/module2_classification/models/base_classifier.pkl` | Stage 1 XGBoost model |

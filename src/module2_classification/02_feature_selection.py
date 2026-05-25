@@ -20,16 +20,16 @@ from sklearn.impute import SimpleImputer
 from src.module2_classification.utils import (
     ID_COLUMNS,
     MERGED_WITH_LABEL_PATH,
-    RISK_CLASSES,
+    NEGATIVE_LABEL,
+    POSITIVE_LABEL,
     STAGE1_FEATURES,
     STAGE2_EXTRA_FEATURES,
     TARGET_COLUMN,
     TEST_DATA_PATH,
     TEST_WEEK_FRACTION,
     TRAIN_DATA_PATH,
-    encode_risk_label,
     ensure_module_dirs,
-    risk_label_distribution,
+    outbreak_label_distribution,
     save_feature_sets,
 )
 from src.utils import load_csv, save_csv
@@ -49,7 +49,7 @@ def score_features(df: pd.DataFrame) -> pd.DataFrame:
     features = _candidate_features(df)
     analysis = df[features + [TARGET_COLUMN]].replace([np.inf, -np.inf], np.nan).dropna()
     x = analysis[features]
-    y = encode_risk_label(analysis[TARGET_COLUMN])
+    y = analysis[TARGET_COLUMN]
 
     imputer = SimpleImputer(strategy="median")
     x_imputed = pd.DataFrame(imputer.fit_transform(x), columns=features)
@@ -112,13 +112,13 @@ def run_feature_selection() -> None:
     save_csv(train, TRAIN_DATA_PATH)
     save_csv(test, TEST_DATA_PATH)
 
+    counts = outbreak_label_distribution(df)
     print(f"Stage 1 features ({len(stage1)}): {stage1}")
     print(f"Stage 2 features ({len(stage2)}): {stage2}")
     print(f"Train rows: {len(train):,} | Test rows: {len(test):,}")
     print("Label distribution (all data):")
-    for label in RISK_CLASSES:
-        n = int(risk_label_distribution(df)[label])
-        print(f"  {label:6s}: {n:,} ({n / len(df):.1%})")
+    print(f"  Normal (0):  {int(counts[NEGATIVE_LABEL]):,} ({counts[NEGATIVE_LABEL] / len(df):.1%})")
+    print(f"  Outbreak (1): {int(counts[POSITIVE_LABEL]):,} ({counts[POSITIVE_LABEL] / len(df):.1%})")
     print("\nTop 10 predictors by average rank:")
     print(scores.head(10).to_string(index=False))
 

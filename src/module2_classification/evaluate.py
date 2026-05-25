@@ -12,14 +12,10 @@ from __future__ import annotations
 import importlib
 import pickle
 
-import pandas as pd
-
 from src.module2_classification.utils import (
     BASE_MODEL_PATH,
     METRICS_PATH,
-    RISK_CLASSES,
     TEST_DATA_PATH,
-    encode_risk_label,
     ensure_module_dirs,
 )
 from src.utils import load_csv
@@ -38,18 +34,14 @@ def run_evaluation() -> None:
     test_df = load_csv(TEST_DATA_PATH, parse_dates=["week_start_date"])
     features = bundle["features"]
     x_test = test_df[features]
-    y_test = encode_risk_label(test_df[bundle["target"]])
+    y_test = test_df[bundle["target"]]
     x_test_imputed = bundle["imputer"].transform(x_test)
     y_pred = bundle["model"].predict(x_test_imputed)
 
-    pred_counts = pd.Series(y_pred).value_counts().reindex(range(len(RISK_CLASSES)), fill_value=0)
-
-    print("Module 2 — Stage 1 evaluation (low / medium / high)")
+    print("Module 2 — Stage 1 evaluation (binary outbreak)")
     print(f"Model: {BASE_MODEL_PATH}")
     print(f"Test rows: {len(test_df):,}")
-    print("Predicted class counts:")
-    for idx, label in enumerate(RISK_CLASSES):
-        print(f"  {label:6s}: {int(pred_counts[idx]):,}")
+    print(f"Predicted outbreaks: {int(y_pred.sum()):,} / {len(y_pred):,}")
 
     if METRICS_PATH.exists():
         print(f"\nDetailed metrics saved to:\n  {METRICS_PATH}")
